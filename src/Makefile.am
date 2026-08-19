@@ -31,10 +31,10 @@ all-local: $(DEP1)
 
 pdmt.$(SO_SUFFIX): pdmt.cpp  $(HPP_DEP)
 if WITHMEDIO
-	$(FFCXX) -auto -mpi pdmt.cpp $(CXXFLAGS_MED) $(LDFLAGS_MED) $(LIBS_MED) $(PDMT_DEBUG) -DMEDCOUPLING
+	$(FFCXX) -mpi pdmt.cpp $(CXXFLAGS_MED) $(LDFLAGS_MED) $(LIBS_MED) $(PDMT_DEBUG) -DMEDCOUPLING
 endif
 if !WITHMEDIO
-	$(FFCXX) -auto -mpi pdmt.cpp $(PDMT_DEBUG)
+	$(FFCXX) -mpi pdmt.cpp $(PDMT_DEBUG)
 	@echo ""
 	@echo " PDMT will not support med meshes"
 endif

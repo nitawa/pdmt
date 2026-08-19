@@ -148,6 +148,10 @@ After installation is done you can simply launch the PDMT mesh conversion via a 
 - `--mode`: dual construction for every dimension, either `subdivided_dual` or `smooth_dual`. The defaults are `smooth_dual` for 2D/3D and `subdivided_dual` for 3S.
 - `--smooth_iterations`: number of boundary-aware dual-area (2D/3S) or dual-volume (3D) balancing passes (`0` by default).
 - `--smooth_relaxation`: strength of each 2D/3D/3S balancing pass, in `(0,1]` (`0.3` by default).
+- `--viscous-layer`: enable viscous layer generation for 2D `.msh` inputs (`no` by default, set to `yes`).
+- `--viscous-layer_groups`: comma-separated Gmsh boundary physical labels/tags to attach viscous layers to (e.g. `tag1,tag2` or `ALL`).
+- `--viscous-layer_count`: number of viscous layer cell subdivisions (`10` by default).
+- `--viscous-layer_thickness`: total physical thickness of the viscous layers (`0.6` by default).
 
 ![image](https://github.com/mohd-afeef-badri/pdmt/assets/52162083/8ae5798d-5a4f-474d-ae39-c7207085f7bd)
 ![image](https://github.com/mohd-afeef-badri/pdmt/assets/52162083/03f0e8ae-75dd-4823-870b-4c65fab363fe)
@@ -159,7 +163,20 @@ After installation is done you can simply launch the PDMT mesh conversion via a 
 PDMT --debug --mesh /your/mesh/file.mesh
 ```
 
-### 2D polygonal meshes
+### 2D polygonal meshes with viscous layers
+
+Use `--viscous-layer yes` along with `--viscous-layer_groups`, `--viscous-layer_count`, and `--viscous-layer_thickness` to inflate structured viscous boundary layers along specified Gmsh boundary physical labels for 2D `.msh` meshes:
+
+```bash
+PDMT --dimension 2 \
+  --mesh /your/mesh/file.msh \
+  --viscous-layer yes \
+  --viscous-layer_groups tag1,tag2 \
+  --viscous-layer_count 10 \
+  --viscous-layer_thickness 0.6 \
+  --out_mesh dual_vl.vtu
+```
+
 
 Use `--dimension 2` to convert a planar triangular mesh into a polygonal dual mesh. Each input vertex produces one output polygon.
 

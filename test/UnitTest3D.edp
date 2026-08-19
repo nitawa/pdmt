@@ -1,4 +1,5 @@
 load "./../src/pdmt"
+load "msh3"
 
 mesh3 Th = readmesh3("single_tetra.mesh3d");
 

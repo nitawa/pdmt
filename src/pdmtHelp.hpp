@@ -42,6 +42,10 @@ int PdmtHelp()
                          defaults: smooth_dual for 2D/3D, subdivided_dual for 3S
   --smooth_iterations: Boundary-aware area/volume passes in 2D/3D/3S (default: 0)
   --smooth_relaxation: 2D/3D/3S balancing relaxation in (0,1] (default: 0.3)
+  --viscous-layer    : Enable viscous layers in 2D (yes/no, default: no)
+  --viscous-layer_groups: Comma-separated Gmsh boundary physical labels or ALL
+  --viscous-layer_count: Number of viscous layers (default: 10)
+  --viscous-layer_thickness: Total thickness of viscous layers (default: 0.6)
   --out_mesh         : Provide name for saved mesh
                          accepts: .med, .vtu, .vtk, .typ2
   --square_mesh_size : Provide mesh size for square mesh
@@ -74,6 +78,11 @@ int PdmtHelp()
 
   # Mesh input triangulation in.msh and save as out.vtu
   PDMT --mesh ./in.msh --out_mesh out.vtu
+
+  # Add viscous layers on boundary groups tag1,tag2 for 2D .msh input
+  PDMT --dimension 2 --mesh ./in.msh --viscous-layer yes \
+       --viscous-layer_groups tag1,tag2 --viscous-layer_count 10 \
+       --viscous-layer_thickness 0.6 --out_mesh dual_vl.vtu
 
   # Mesh input .vtk file and save as out.vtk with verbose info
   PDMT --debug --mesh ./in.vtk --out_mesh out.vtk

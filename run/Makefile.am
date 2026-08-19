@@ -1,7 +1,7 @@
 FF_IS = `which $(FFMPI)`
 
 
-EXPORT_PDMT  =\nexport FF_LOADPATH="${prefix}/lib";\nexport FF_INCLUDEPATH="${prefix}/lib"
+EXPORT_PDMT  =\nexport FF_LOADPATH="$(top_builddir)/src:${prefix}/lib:/usr/lib/freefem++/mpi:/usr/lib/freefem++";\nexport FF_INCLUDEPATH="$(top_builddir)/run:${prefix}/lib:/usr/include/freefem++/idp"
 EXPORT_PDMT +=\nexport PATH="${prefix}/bin:$$PATH";\nexport LD_LIBRARY_PATH="${prefix}/lib:$$LD_LIBRARY_PATH"
 
 
@@ -32,6 +32,12 @@ EXPORT_MED  =
 endif
 
 all-local: PDMT
+if !WITHMEDIO
+	find . -name meshIO.idp -exec sed -i -e "s#load \"medio\"#// load \"medio\"#g" {} \;
+	find . -name meshIO.idp -exec sed -i -e "s#Th2D = loadmedmesh(meshName, meshname = medMeshName);#cout<<\"No med support PDMT not compiled with medio\"<<endl;#g" {} \;
+	find . -name meshIO.idp -exec sed -i -e "s#Th3D = PdmtLoadMedMesh3(meshName, meshname = medMeshName);#cout<<\"No med support PDMT not compiled with medio\"<<endl;#g" {} \;
+	find . -name meshIO.idp -exec sed -i -e "s#ThS = PdmtLoadMedMeshS(meshName, meshname = medMeshName);#cout<<\"No med support PDMT not compiled with medio\"<<endl;#g" {} \;
+endif
 	@echo ""
 	@echo "*============================================================*"
 	@echo " Compilation done in :"; pwd
@@ -53,7 +59,13 @@ endif
 	cp pdmt.edp pdmt.edp.tmp && find . -name pdmt.edp.tmp -exec sed -i -e "s#./../src/pdmt#pdmt#g" {} \;
 	mv meshIO.idp.tmp ${prefix}/lib/meshIO.idp
 	mv pdmt.edp.tmp ${prefix}/lib/pdmt.edp
+	cp /usr/include/freefem++/idp/getARGV.idp ${prefix}/lib/getARGV.idp 2>/dev/null || true
+	ln -s /usr/lib/freefem++/*.so ${prefix}/lib/ 2>/dev/null || true
+	ln -s /usr/lib/freefem++/mpi/*.so ${prefix}/lib/ 2>/dev/null || true
 	cp ./PDMT ${prefix}/bin/.
+	sed -i -e "s#default_args=.*#default_args=\"-np 1 FreeFem++-mpi ${prefix}/lib/pdmt.edp\"#g" ${prefix}/bin/PDMT
+	sed -i -e "s#FF_LOADPATH=\".*\"#FF_LOADPATH=\"${prefix}/lib\"#g" ${prefix}/bin/PDMT
+	sed -i -e "s#FF_INCLUDEPATH=\".*\"#FF_INCLUDEPATH=\"${prefix}/lib\"#g" ${prefix}/bin/PDMT
 
 PDMT:
 	cat $(FF_IS) > PDMT
@@ -66,7 +78,7 @@ PDMT:
 #	find . -name PDMT -exec sed -i -e 's#mpi_run_option=\"\"#mpi_run_option=\"-np 1 FreeFem++-mpi ${prefix}/lib/pdmt.edp\"#g' {} \;
 #	find . -name PDMT -exec sed -i -e 's#a\[((j++))\]=\"$$mpi_run_option\"#a\[((j++))\]=\"$$mpi_run_option -np 1 FreeFem++-mpi ${prefix}/lib/pdmt.edp\"#g' {} \;
 	chmod a+x ./PDMT
-	less ./PDMT
+#	less ./PDMT
 
 a[((j++))]="$mpi_run_option"
 
@@ -98,13 +110,13 @@ check-local:
 	@echo " test 4: circle no debug"
 	@echo "*------------------------------------------------------------*"
 	@echo ""
-	./PDMT  --mesh circle
+	./PDMT --mesh circle
 	@echo ""
 	@echo "*------------------------------------------------------------*"
 	@echo " test 5: circle no debug pdmt_mesh.typ2"
 	@echo "*------------------------------------------------------------*"
 	@echo ""
-	./PDMT  --mesh circle --out_mesh pdmt_mesh.typ2
+	./PDMT --mesh circle --out_mesh pdmt_mesh.typ2
 
 
 clean-local:

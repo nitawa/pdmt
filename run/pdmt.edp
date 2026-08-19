@@ -43,7 +43,7 @@
 load    "./../src/pdmt";                 // Load pdmt library
 //load    "PETSc";
 
-include "getARGV.idp";                   // Activate Commandline arguments
+include "/usr/include/freefem++/idp/getARGV.idp";                   // Activate Commandline arguments
 include "meshIO.idp";                    // mesh loading and saving
 
 //----------------------------------------------------------------------
@@ -230,6 +230,11 @@ func int run2D (){
  string dualMode    = getARGV( "--mode" , "smooth_dual" );         // smooth_dual or subdivided_dual
  int smoothIterations = getARGV("--smooth_iterations", 0);
  real smoothRelaxation = getARGV("--smooth_relaxation", 0.3);
+ string viscousLayer          = getARGV("--viscous-layer", "no");
+ string viscousLayerGroups    = getARGV("--viscous-layer_groups", "");
+ int    viscousLayerCount     = getARGV("--viscous-layer_count", 10);
+ real   viscousLayerThickness = getARGV("--viscous-layer_thickness", 0.6);
+
  if (dualMode != "smooth_dual" && dualMode != "subdivided_dual") {
    cout << "PDMT 2D --mode must be smooth_dual or subdivided_dual" << endl;
    exit(1111);
@@ -242,6 +247,31 @@ func int run2D (){
    cout << "PDMT 2D --smooth_relaxation must be in (0,1]" << endl;
    exit(1111);
  }
+
+ int useViscousLayer = (viscousLayer == "yes" || viscousLayer == "true" || viscousLayer == "1");
+ if (usedARGV("--viscous-layer") != -1 && viscousLayer != "yes" && viscousLayer != "no" && viscousLayer != "true" && viscousLayer != "false" && viscousLayer != "0" && viscousLayer != "1") {
+   cout << "PDMT 2D --viscous-layer must be yes or no" << endl;
+   exit(1111);
+ }
+ if (useViscousLayer) {
+   if (ThName.find(".msh") == -1) {
+     cout << "PDMT 2D --viscous-layer is currently only supported for .msh input mesh files" << endl;
+     exit(1111);
+   }
+   if (viscousLayerGroups == "") {
+     cout << "PDMT 2D --viscous-layer_groups must be specified when --viscous-layer is enabled" << endl;
+     exit(1111);
+   }
+   if (viscousLayerCount <= 0) {
+     cout << "PDMT 2D --viscous-layer_count must be greater than 0" << endl;
+     exit(1111);
+   }
+   if (viscousLayerThickness <= 0.0) {
+     cout << "PDMT 2D --viscous-layer_thickness must be greater than 0.0" << endl;
+     exit(1111);
+   }
+ }
+
  int smoothDual2D = (dualMode == "smooth_dual");
  mesh   Th          = loadTheMesh( ThName , MedMeshName );         // function in meshIO.edp
 
@@ -267,6 +297,127 @@ func int run2D (){
      ThNnb =  meshInfo[2],                  // # boundary nodes
      ThNt  =  meshInfo[3],                  // # triangles
      ThNbe =  meshInfo[4];                  // # boundary edges
+
+ int borderNodeCount = 0;
+ int[int] borderNodeIndexMap(ThNn);
+ borderNodeIndexMap = -1;
+ for (int n = 0; n < ThNn; ++n) {
+   if (isBorderNode[n]) {
+     borderNodeIndexMap[n] = borderNodeCount;
+     borderNodeCount++;
+   }
+ }
+
+ int[int] isVLEdge(ThNbe);
+ int[int] isVLNode(ThNn);
+ isVLEdge = 0;
+ isVLNode = 0;
+ real[int] borderNodeNx(ThNn), borderNodeNy(ThNn);
+ borderNodeNx = 0.0; borderNodeNy = 0.0;
+ int nbVLEdges = 0;
+ int nbVLNodes = 0;
+ int[int] vlNodeLocalIdx(ThNn);
+ vlNodeLocalIdx = -1;
+
+ if (useViscousLayer) {
+   int[int] vlTags;
+   PdmtParseGmshPhysicalTags(ThName, viscousLayerGroups, vlTags);
+   if (vlTags.n == 0) {
+     cout << "PDMT 2D --viscous-layer_groups: no matching boundary tags found in " << ThName << endl;
+     exit(1111);
+   }
+
+   for (int be = 0; be < ThNbe; ++be) {
+     int lab = Th.be(be).label;
+     for (int t = 0; t < vlTags.n; ++t) {
+       if (lab == vlTags[t]) {
+         isVLEdge[be] = 1;
+         nbVLEdges++;
+         break;
+       }
+     }
+   }
+
+   real[int] edgeNx(ThNbe), edgeNy(ThNbe);
+   edgeNx = 0.0; edgeNy = 0.0;
+
+   for (int be = 0; be < ThNbe; ++be) {
+     if (isVLEdge[be]) {
+       int a = Th.be(be)[0];
+       int b = Th.be(be)[1];
+       real tx = Th(b).x - Th(a).x;
+       real ty = Th(b).y - Th(a).y;
+       real len = sqrt(tx*tx + ty*ty);
+       if (len > 0.0) { tx /= len; ty /= len; }
+       real nx = -ty;
+       real ny = tx;
+
+       real mx = 0.5 * (Th(a).x + Th(b).x);
+       real my = 0.5 * (Th(a).y + Th(b).y);
+
+       int kTri = -1;
+       for (int t = 0; t < ThNt; ++t) {
+         int hasA = (Th[t][0] == a || Th[t][1] == a || Th[t][2] == a);
+         int hasB = (Th[t][0] == b || Th[t][1] == b || Th[t][2] == b);
+         if (hasA && hasB) { kTri = t; break; }
+       }
+
+       if (kTri >= 0) {
+         int c = -1;
+         for (int lv = 0; lv < 3; ++lv) {
+           if (Th[kTri][lv] != a && Th[kTri][lv] != b)
+             c = Th[kTri][lv];
+         }
+         if (c >= 0) {
+           real vinx = Th(c).x - mx;
+           real viny = Th(c).y - my;
+           if (nx * vinx + ny * viny < 0.0) {
+             nx = -nx; ny = -ny;
+           }
+         }
+       }
+       edgeNx[be] = nx;
+       edgeNy[be] = ny;
+
+       isVLNode[a] = 1;
+       isVLNode[b] = 1;
+     }
+   }
+
+   for (int be = 0; be < ThNbe; ++be) {
+     if (isVLEdge[be]) {
+       int a = Th.be(be)[0];
+       int b = Th.be(be)[1];
+       borderNodeNx[a] += edgeNx[be];
+       borderNodeNy[a] += edgeNy[be];
+       borderNodeNx[b] += edgeNx[be];
+       borderNodeNy[b] += edgeNy[be];
+     }
+   }
+
+   for (int v = 0; v < ThNn; ++v) {
+     if (isVLNode[v]) {
+       real nlen = sqrt(borderNodeNx[v]*borderNodeNx[v] + borderNodeNy[v]*borderNodeNy[v]);
+       if (nlen > 0.0) {
+         borderNodeNx[v] /= nlen;
+         borderNodeNy[v] /= nlen;
+       }
+       vlNodeLocalIdx[v] = nbVLNodes;
+       nbVLNodes++;
+     }
+   }
+
+   if (verbosity) {
+     cout << "PDMT 2D Viscous Layer options:" << endl;
+     cout << "  --viscous-layer           : yes" << endl;
+     cout << "  --viscous-layer_groups    : " << viscousLayerGroups << endl;
+     cout << "  --viscous-layer_count     : " << viscousLayerCount << endl;
+     cout << "  --viscous-layer_thickness : " << viscousLayerThickness << endl;
+     cout << "  Matched boundary tags     : " << vlTags.n << endl;
+     cout << "  Viscous layer boundary edges: " << nbVLEdges << endl;
+     cout << "  Viscous layer boundary nodes: " << nbVLNodes << endl;
+   }
+ }
 
 
 
@@ -368,18 +519,18 @@ func int run2D (){
   int [int][int] PhC;
   int [int][int] PhE;
 
-{
-  int PhNn =  ThNt  + ThNnb + ThNbe;
+  int basePhNn = ThNt + ThNnb + ThNbe;
   if(!smoothDual2D)
-    PhNn = ThNt + ThNnb + PrimalEdgeA.n;
-  int PhNp =  ThNn;
-  int PhNe =  ThNbe*2;
+    basePhNn = ThNt + ThNnb + PrimalEdgeA.n;
+  int PhNn = basePhNn + nbVLNodes * viscousLayerCount;
+  int PhNp = basePhNn + nbVLEdges * viscousLayerCount;
+  int PhNe = ThNbe*2 + nbVLEdges * viscousLayerCount + nbVLNodes * viscousLayerCount;
 
   PhV.resize(PhNn,2);
   PhC.resize(PhNp);
   PhE.resize(PhNe);
   PhELabels.resize(PhNp + PhNe);
-}
+  int[int] borderNodePhVIdx(ThNn);
 
 
 
@@ -397,15 +548,32 @@ func int run2D (){
 
   for(int n=0; n<ThNn;++n){
     if(isBorderNode[n]){
-      PhV(polynodeindex,0) = ThVix[][n];
-      PhV(polynodeindex,1) = ThViy[][n];
+      borderNodePhVIdx[n] = polynodeindex;
+      if (isVLNode[n]) {
+        PhV(polynodeindex,0) = ThVix[][n] + viscousLayerThickness * borderNodeNx[n];
+        PhV(polynodeindex,1) = ThViy[][n] + viscousLayerThickness * borderNodeNy[n];
+      } else {
+        PhV(polynodeindex,0) = ThVix[][n];
+        PhV(polynodeindex,1) = ThViy[][n];
+      }
       polynodeindex++;
     }
   }
 
   for(int be=0; be<ThNbe;++be){
-    PhV(polynodeindex,0) = ThEix(be);
-    PhV(polynodeindex,1) = ThEiy(be);
+    if (isVLEdge[be]) {
+      int a = Th.be(be)[0];
+      int b = Th.be(be)[1];
+      real axN = Th(a).x + viscousLayerThickness * borderNodeNx[a];
+      real ayN = Th(a).y + viscousLayerThickness * borderNodeNy[a];
+      real bxN = Th(b).x + viscousLayerThickness * borderNodeNx[b];
+      real byN = Th(b).y + viscousLayerThickness * borderNodeNy[b];
+      PhV(polynodeindex,0) = 0.5 * (axN + bxN);
+      PhV(polynodeindex,1) = 0.5 * (ayN + byN);
+    } else {
+      PhV(polynodeindex,0) = ThEix(be);
+      PhV(polynodeindex,1) = ThEiy(be);
+    }
     polynodeindex++;
   }
 
@@ -415,6 +583,20 @@ func int run2D (){
       PhV(polynodeindex,0) = PrimalEdgeX[e];
       PhV(polynodeindex,1) = PrimalEdgeY[e];
       polynodeindex++;
+    }
+  }
+
+  if (useViscousLayer) {
+    for (int v = 0; v < ThNn; ++v) {
+      if (isVLNode[v]) {
+        int lIdx = vlNodeLocalIdx[v];
+        for (int k = 0; k < viscousLayerCount; ++k) {
+          int extraSlot = basePhNn + lIdx * viscousLayerCount + k;
+          real dist = k * (viscousLayerThickness / viscousLayerCount);
+          PhV(extraSlot, 0) = Th(v).x + dist * borderNodeNx[v];
+          PhV(extraSlot, 1) = Th(v).y + dist * borderNodeNy[v];
+        }
+      }
     }
   }
 }
@@ -590,17 +772,19 @@ macro orderPointsAroundVertex(V, cx, cy)
 
       PhC[indexploy][pos] = pointBorder;
 
-      PhE[indexedge].resize(2);
-      PhE[indexedge][0] = posVect[0];
-      PhE[indexedge][1] = pointBorder;
-      PhELabels[ThNn + indexedge] = edgeLocalLab[0];
-      indexedge++;
+      if (!isVLNode[v]) {
+        PhE[indexedge].resize(2);
+        PhE[indexedge][0] = posVect[0];
+        PhE[indexedge][1] = pointBorder;
+        PhELabels[PhNp + indexedge] = edgeLocalLab[0];
+        indexedge++;
 
-      PhE[indexedge].resize(2);
-      PhE[indexedge][0] = pointBorder;
-      PhE[indexedge][1] = posVect[1];
-      PhELabels[ThNn + indexedge] = edgeLocalLab[1];
-      indexedge++;
+        PhE[indexedge].resize(2);
+        PhE[indexedge][0] = pointBorder;
+        PhE[indexedge][1] = posVect[1];
+        PhELabels[PhNp + indexedge] = edgeLocalLab[1];
+        indexedge++;
+      }
 
       indexploy++;
       indexnbe++;
@@ -637,6 +821,46 @@ macro orderPointsAroundVertex(V, cx, cy)
       indexploy++;
     }
   }
+
+  if (useViscousLayer) {
+    int vlQuadCount = 0;
+    for (int be = 0; be < ThNbe; ++be) {
+      if (isVLEdge[be]) {
+        int a = Th.be(be)[0];
+        int b = Th.be(be)[1];
+        int cellLab = ThEiLab(be);
+        for (int k = 1; k <= viscousLayerCount; ++k) {
+          int n0 = basePhNn + vlNodeLocalIdx[a] * viscousLayerCount + (k - 1);
+          int n1 = basePhNn + vlNodeLocalIdx[b] * viscousLayerCount + (k - 1);
+          int n2 = (k == viscousLayerCount) ? borderNodePhVIdx[b] : (basePhNn + vlNodeLocalIdx[b] * viscousLayerCount + k);
+          int n3 = (k == viscousLayerCount) ? borderNodePhVIdx[a] : (basePhNn + vlNodeLocalIdx[a] * viscousLayerCount + k);
+
+          PhC[indexploy].resize(4);
+          PhC[indexploy][0] = n0;
+          PhC[indexploy][1] = n1;
+          PhC[indexploy][2] = n2;
+          PhC[indexploy][3] = n3;
+
+          PhELabels[indexploy] = cellLab;
+          indexploy++;
+          vlQuadCount++;
+        }
+
+        int segN0 = basePhNn + vlNodeLocalIdx[a] * viscousLayerCount + 0;
+        int segN1 = basePhNn + vlNodeLocalIdx[b] * viscousLayerCount + 0;
+        PhE[indexedge].resize(2);
+        PhE[indexedge][0] = segN0;
+        PhE[indexedge][1] = segN1;
+        PhELabels[PhNp + indexedge] = ThEiLab(be);
+        indexedge++;
+      }
+    }
+  }
+
+  PhC.resize(indexploy);
+  PhNp = indexploy;
+  PhE.resize(indexedge);
+  PhELabels.resize(PhNp + indexedge);
 }
 
 //-----------------------------------------------------------------------

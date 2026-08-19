@@ -17,8 +17,10 @@ maintainer-clean-local: clean-local
 	@echo ""
 	rm  -rf Makefile Makefile.in
 
+FF_TEST_ENV = export FF_LOADPATH="${prefix}/lib"; export FF_INCLUDEPATH="${prefix}/lib";
+
 EXTRA_DIST = check_2d_dual_vtu.py check_3d_regularization.py \
-	check_3s_regularization.py open_surface.msh3d
+	check_3s_regularization.py check_2d_viscous_layers.py open_surface.msh3d
 
 # These tests load build-tree plugins directly and bypass run/PDMT, which
 # normally exports the MED runtime library paths. Use configure substitutions
@@ -31,15 +33,19 @@ if HAVEMED
 MED_TEST_ENV += LD_LIBRARY_PATH="$(hdf5)/lib:$(medfile)/lib:$(medcoupling)/lib:$${LD_LIBRARY_PATH}"
 endif
 
-check-local: test-vtk test-msh test-mesh test-med test-2d-modes test-3d test-conserve-edge test-3s test-med-3d
+check-local: test-vtk test-msh test-mesh test-med test-2d-modes test-viscous-layer test-3d test-conserve-edge test-3s test-med-3d
 	@echo ""
 	@echo "*============================================================*"
 	@echo " performing check for pdmt"
 	@echo "*============================================================*"
 	@echo ""
 
+test-viscous-layer: check_2d_viscous_layers.py
+	./../run/PDMT --dimension 2 --mesh ./../msh/disk1hole.msh --viscous-layer yes --viscous-layer_groups 1,2 --viscous-layer_count 10 --viscous-layer_thickness 0.05 --out_mesh test_vl_disk.vtu > test_vl_disk.log
+	python3 ./check_2d_viscous_layers.py test_vl_disk_0000.vtu --min-quads 10
+
 UnitTestCovexHull: UnitTestCovexHull.edp
-	$(MED_TEST_ENV) $(FFMPI) -np 1 UnitTestCovexHull.edp -v 0 -ns -nw > UnitTestCovexHull.log
+	$(MED_TEST_ENV) $(FF_TEST_ENV) $(FFMPI) -np 1 UnitTestCovexHull.edp -v 0 -ns -nw > UnitTestCovexHull.log
 
 test-2d-modes: check_2d_dual_vtu.py
 	./../run/PDMT --dimension 2 --mesh square --square_mesh_size 4 --mode smooth_dual --out_mesh test_2d_smooth.vtu > test_2d_smooth.log
@@ -54,21 +60,21 @@ test-2d-modes: check_2d_dual_vtu.py
 	python3 ./check_2d_dual_vtu.py test_2d_subdivided_circle_0000.vtu
 
 test-3d: UnitTest3D.edp single_tetra.mesh3d offcenter_cube.mesh3d
-	$(MED_TEST_ENV) $(FFMPI) -np 1 UnitTest3D.edp -v 0 -nw > UnitTest3D.log
+	$(MED_TEST_ENV) $(FF_TEST_ENV) $(FFMPI) -np 1 UnitTest3D.edp -v 0 -nw > UnitTest3D.log
 	python3 ./check_3d_regularization.py offcenter_unsmoothed_0000.vtu offcenter_regularized_0000.vtu
 
 test-conserve-edge: UnitTestConserveEdge.edp physical_edge.msh3d
-	$(MED_TEST_ENV) $(FFMPI) -np 1 UnitTestConserveEdge.edp -v 0 -nw > UnitTestConserveEdge.log
+	$(MED_TEST_ENV) $(FF_TEST_ENV) $(FFMPI) -np 1 UnitTestConserveEdge.edp -v 0 -nw > UnitTestConserveEdge.log
 
 test-3s: UnitTest3S.edp folded_surface_edge.msh3d closed_surface.msh3d open_surface.msh3d
-	$(MED_TEST_ENV) $(FFMPI) -np 1 UnitTest3S.edp -v 0 -nw > UnitTest3S.log
+	$(MED_TEST_ENV) $(FF_TEST_ENV) $(FFMPI) -np 1 UnitTest3S.edp -v 0 -nw > UnitTest3S.log
 	python3 ./check_3s_regularization.py open_surface_smooth_0000.vtu open_surface_smooth_regularized_0000.vtu
 	python3 ./check_3s_regularization.py open_surface_subdivided_0000.vtu open_surface_subdivided_regularized_0000.vtu
 	python3 ./check_3s_regularization.py open_surface_feature_0000.vtu open_surface_feature_regularized_0000.vtu
 
 if WITHMEDIO
 test-med-3d: UnitTestMED3D.edp single_tetra.mesh3d closed_surface.msh3d folded_surface_edge.msh3d
-	$(MED_TEST_ENV) $(FFMPI) -np 1 UnitTestMED3D.edp -v 0 -nw > UnitTestMED3D.log
+	$(MED_TEST_ENV) $(FF_TEST_ENV) $(FFMPI) -np 1 UnitTestMED3D.edp -v 0 -nw > UnitTestMED3D.log
 else
 test-med-3d:
 endif

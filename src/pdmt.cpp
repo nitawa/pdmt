@@ -51,6 +51,7 @@ static void InitFF()
   Global.Add("PdmtFillSearchTableTriangles", "(", new OneOperator3_< int,  pmesh, KN< long > *, KN< long > * >(PdmtFillSearchTableTriangles));
   Global.Add("PdmtFillSearchTableEdges", "(", new OneOperator3_< int,  pmesh, KN< long > *, KN< long > * >(PdmtFillSearchTableEdges));
   Global.Add("PdmtGetMeshInfo", "(", new OneOperator3_< int,  pmesh, KN< long > *, KN< long > * >(PdmtGetMeshInfo));
+  Global.Add("PdmtParseGmshPhysicalTags", "(", new OneOperator3_< int, string*, string*, KN< long > * >(PdmtParseGmshPhysicalTags));
   Global.Add("PdmtBuildDual3D", "(", new pdmtBuildDual3D);
   Global.Add("PdmtBuildDual3S", "(", new pdmtBuildDual3S);
   Global.Add("PdmtPolyMeshWrite"  ,"(", new polyMeshWrite<double>);

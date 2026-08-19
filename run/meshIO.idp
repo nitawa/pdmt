@@ -66,8 +66,8 @@ func mesh loadTheMesh(string meshName, string medMeshName){
     }
 
     if( meshName.find(".med") > -1 ){
-      load "medio"
-      Th2D = loadmedmesh(meshName, meshname = medMeshName);
+      // // // load "medio"
+      cout<<"No med support PDMT not compiled with medio"<<endl;
     }
 
     if( meshName.find(".mesh") > -1 ){
@@ -114,7 +114,7 @@ func mesh3 loadTheMesh3(string meshName, string medMeshName){
     }
 
     if (meshName.find(".med") > -1) {
-      Th3D = PdmtLoadMedMesh3(meshName, meshname = medMeshName);
+      cout<<"No med support PDMT not compiled with medio"<<endl;
     }
 
     if (meshName.find(".mesh") > -1)
@@ -151,7 +151,7 @@ func meshS loadTheMeshS(string meshName, string medMeshName){
     }
 
     if (meshName.find(".med") > -1) {
-      ThS = PdmtLoadMedMeshS(meshName, meshname = medMeshName);
+      cout<<"No med support PDMT not compiled with medio"<<endl;
     }
 
     if (meshName.find(".mesh") > -1)

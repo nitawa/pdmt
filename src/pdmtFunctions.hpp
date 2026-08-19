@@ -186,3 +186,121 @@ double PdmtMaxinTwoP1(KN<double> *const & f, KN<double> *const & f1)
 
   return 0.0;
 }
+
+//-------------------------------------------------------------------------
+// PdmtParseGmshPhysicalTags :
+//           Parses named or integer physical line groups from a Gmsh .msh file
+//           for viscous layer boundary group selection.
+//-------------------------------------------------------------------------
+inline std::string pdmtTrimString(const std::string &value) {
+  std::string::size_type begin = 0;
+  while (begin < value.size() && std::isspace(static_cast<unsigned char>(value[begin])))
+    ++begin;
+  std::string::size_type end = value.size();
+  while (end > begin && std::isspace(static_cast<unsigned char>(value[end - 1])))
+    --end;
+  return value.substr(begin, end - begin);
+}
+
+inline std::vector<std::string> pdmtSplitCsvString(const std::string &csv) {
+  std::vector<std::string> result;
+  std::string::size_type begin = 0;
+  while (begin <= csv.size()) {
+    const std::string::size_type comma = csv.find(',', begin);
+    const std::string token = pdmtTrimString(csv.substr(
+        begin, comma == std::string::npos ? std::string::npos : comma - begin));
+    if (!token.empty())
+      result.push_back(token);
+    if (comma == std::string::npos)
+      break;
+    begin = comma + 1;
+  }
+  return result;
+}
+
+int PdmtParseGmshPhysicalTags(string* const &pMeshFile,
+                              string* const &pRequestedGroups,
+                              KN< long > *const &pTags) {
+  const std::string meshFileName = *pMeshFile;
+  const std::string requestedCsv = *pRequestedGroups;
+  const std::vector<std::string> requested = pdmtSplitCsvString(requestedCsv);
+
+  std::ifstream input(meshFileName.c_str());
+  std::map<std::string, long> nameToTag;
+  std::set<long> allLineTags;
+
+  if (input) {
+    std::string line;
+    while (std::getline(input, line)) {
+      std::string section = pdmtTrimString(line);
+      if (section == "$PhysicalNames") {
+        std::string countLine;
+        if (std::getline(input, countLine)) {
+          const long count = std::strtol(countLine.c_str(), 0, 10);
+          for (long i = 0; i < count; ++i) {
+            std::string pLine;
+            if (!std::getline(input, pLine)) break;
+            std::istringstream values(pLine);
+            long dimension = -1;
+            long tag = -1;
+            values >> dimension >> tag;
+            const std::string::size_type firstQuote = pLine.find('"');
+            const std::string::size_type lastQuote = pLine.rfind('"');
+            if (dimension == 1 && firstQuote != std::string::npos && lastQuote > firstQuote) {
+              std::string pName = pLine.substr(firstQuote + 1, lastQuote - firstQuote - 1);
+              nameToTag[pName] = tag;
+              allLineTags.insert(tag);
+            }
+          }
+        }
+      } else if (section == "$Elements") {
+        std::string countLine;
+        if (std::getline(input, countLine)) {
+          const long count = std::strtol(countLine.c_str(), 0, 10);
+          for (long i = 0; i < count; ++i) {
+            std::string eLine;
+            if (!std::getline(input, eLine)) break;
+            std::istringstream values(eLine);
+            long id = 0, elementType = 0, numberOfTags = 0;
+            values >> id >> elementType >> numberOfTags;
+            long physicalTag = 0;
+            for (long t = 0; t < numberOfTags; ++t) {
+              long val = 0;
+              values >> val;
+              if (t == 0) physicalTag = val;
+            }
+            if (elementType == 1 || elementType == 8 || elementType == 26 || elementType == 27 || elementType == 28) {
+              if (physicalTag > 0)
+                allLineTags.insert(physicalTag);
+            }
+          }
+        }
+      }
+    }
+  }
+
+  std::set<long> matchedTags;
+  for (size_t i = 0; i < requested.size(); ++i) {
+    const std::string &req = requested[i];
+    if (req == "ALL") {
+      matchedTags.insert(allLineTags.begin(), allLineTags.end());
+    } else if (nameToTag.find(req) != nameToTag.end()) {
+      matchedTags.insert(nameToTag[req]);
+    } else {
+      char *endPtr = 0;
+      long val = std::strtol(req.c_str(), &endPtr, 10);
+      if (endPtr != req.c_str() && *endPtr == '\0') {
+        matchedTags.insert(val);
+      }
+    }
+  }
+
+  pTags->resize(matchedTags.size());
+  long idx = 0;
+  for (std::set<long>::const_iterator it = matchedTags.begin(); it != matchedTags.end(); ++it) {
+    (*pTags)[idx++] = *it;
+  }
+
+  return 0;
+}
+
